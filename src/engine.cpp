@@ -302,6 +302,26 @@ static std::wstring AssetPath(const wchar_t* rel)
     return candidates[0];
 }
 
+void Engine::PlaySfx(const wchar_t* fileName)
+{
+    if (!m_audio) return;
+    auto it = m_sfx.find(fileName);
+    if (it == m_sfx.end())
+    {
+        std::unique_ptr<DirectX::SoundEffect> fx;
+        try
+        {
+            fx = std::make_unique<DirectX::SoundEffect>(m_audio.get(), AssetPath(fileName).c_str());
+        }
+        catch (...)
+        {
+            fx = nullptr; // a missing or broken wav must not take the game down
+        }
+        it = m_sfx.emplace(std::wstring(fileName), std::move(fx)).first;
+    }
+    if (it->second) it->second->Play();
+}
+
 ID3D11ShaderResourceView* Engine::GetTexture(int id)
 {
     auto it = m_texes.find(id);

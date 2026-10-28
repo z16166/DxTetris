@@ -55,7 +55,8 @@ add_executable(tetris
 )
 add_dependencies(tetris assets)
 # keep the exe folder self-contained so a double-click works without the project tree
-file(GLOB TETRIS_RUNTIME_ASSETS "${CMAKE_CURRENT_SOURCE_DIR}/assets/src/*.png")
+file(GLOB TETRIS_RUNTIME_ASSETS "${CMAKE_CURRENT_SOURCE_DIR}/assets/src/*.png"
+     "${CMAKE_CURRENT_SOURCE_DIR}/assets/src/*.wav")
 add_custom_command(TARGET tetris POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:tetris>/assets/src"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${TETRIS_RUNTIME_ASSETS} "$<TARGET_FILE_DIR:tetris>/assets/src"

@@ -9,6 +9,7 @@ A Tetris clone in C++20 / Direct3D 11, built with CMake + Ninja against [DirectX
 - Guideline-ish scoring (single/double/triple/quad, back-to-back, combo, level curve)
 - Ghost piece (landing preview) and top-out indicator
 - Bitmap font rendered from a generated glyph atlas (`tools/gen_font.py`)
+- Sound effects (move/rotate/lock/clear/combo/level-up/game over) via DirectXTK AudioEngine; the game still runs if no playback device exists
 - `--snapshot` mode renders a frame to PNG (useful for CI / smoke tests)
 
 ## Controls

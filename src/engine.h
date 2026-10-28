@@ -60,6 +60,9 @@ public:
     void Clear(const DirectX::SimpleMath::Color& c); // clear RT+DSV
     ID3D11Device* Device() { return m_dev.Get(); }
     ID3D11DeviceContext* Ctx() { return m_ctx.Get(); }
+    // audio (no-op when the machine has no playback device)
+    void PlaySfx(const wchar_t* fileName); // relative path, loaded once then cached
+    bool AudioReady() const { return m_audio != nullptr; }
 
 private:
     void BindBackBuffer(); // flip-model: GetBuffer(0) is only valid until Present, so rebind each frame
@@ -88,6 +91,7 @@ private:
 
     // audio: RAII engine (unique_ptr) + SoundEffect loaded once + wave bank (from memory)
     std::unique_ptr<DirectX::AudioEngine> m_audio; // DirectXTK DirectX::AudioEngine ✓ (RAII)
+    std::unordered_map<std::wstring, std::unique_ptr<DirectX::SoundEffect>> m_sfx; // lazy-loaded, keyed by file name
     std::unique_ptr<DirectX::WaveBank>
         m_waveBank; // (unused runtime; generated static wav pool in game.cpp — loaded direct in-game from header data)
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> m_fontSrv; // generated font sheet (loaded once)

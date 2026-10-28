@@ -24,6 +24,7 @@ static bool g_running = true;
 // key-map (game.h Idx contract: L,R,CW,CCW,R180,SOFT,HOLD,HARD,START,PAUSE — see game.cpp Idx)
 static InputSnapshot g_keys; // current frame snapshot (edge flags)
 static bool s_keyDown[256];  // physical key state, updated from WM_KEYDOWN/WM_KEYUP (no polling API needed)
+static bool s_edge[11];      // this frame's key-press edges (Idx order)
 
 static void PumpInput()
 {
@@ -37,7 +38,8 @@ static void PumpInput()
         bool was = prev[i];
         prev[i] = s_keyDown[MAP[i] & 0xFF] != 0;
         g_keys.p[i] = prev[i];
-        if (prev[i] && !was) g_keys.anyEdge = true;
+        s_edge[i] = prev[i] && !was;
+        if (s_edge[i]) g_keys.anyEdge = true;
     }
 }
 
@@ -146,6 +148,48 @@ static void DrawPlayfield()
         g_ui->DrawTextA(UiFont::kDefaultFont, "GAME OVER - press Y", 640, 40.f, Math::Color(0.95f, 0.45f, 0.45f, 1.f));
     else if (g_game->IsPaused())
         g_ui->DrawTextA(UiFont::kDefaultFont, "PAUSED", 640, 40.f, Math::Color(0.95f, 0.85f, 0.40f, 1.f));
+
+    if (!g_engine->AudioReady()) // no playback device: say so instead of looking broken
+        g_ui->DrawTextA(UiFont::kDefaultFont, "AUDIO OFF", 640, 150.f, Math::Color(0.70f, 0.50f, 0.50f, 1.f));
+}
+
+// sound effects: input edges plus game-state deltas. Audio is optional: PlaySfx no-ops without a device.
+static void PumpAudio()
+{
+    if (!g_engine || !g_game) return;
+
+    if (s_edge[0] || s_edge[1]) g_engine->PlaySfx(L"assets\\src\\sfx_key_move.wav");
+    if (s_edge[2] || s_edge[3] || s_edge[4]) g_engine->PlaySfx(L"assets\\src\\sfx_key_rotate.wav");
+    if (s_edge[5]) g_engine->PlaySfx(L"assets\\src\\sfx_softstep.wav");
+    if (s_edge[6]) g_engine->PlaySfx(L"assets\\src\\sfx_key_hold.wav");
+    if (s_edge[7]) g_engine->PlaySfx(L"assets\\src\\sfx_harddrop.wav");
+    if (s_edge[9])
+        g_engine->PlaySfx(g_game->IsPaused() ? L"assets\\src\\sfx_pause.wav" : L"assets\\src\\sfx_unpause.wav");
+
+    static int prevLines = 0;
+    static int prevLevel = 1;
+    static bool prevOver = false;
+
+    const int lines = g_game->Lines();
+    if (lines > prevLines)
+    {
+        const int n = lines - prevLines;
+        const wchar_t* clear = (n >= 4)   ? L"assets\\src\\sfx_clear4.wav"
+                               : (n == 3) ? L"assets\\src\\sfx_clear3.wav"
+                               : (n == 2) ? L"assets\\src\\sfx_clear2.wav"
+                                          : L"assets\\src\\sfx_clear1.wav";
+        g_engine->PlaySfx(clear);
+        if (g_game->Combo() >= 1) g_engine->PlaySfx(L"assets\\src\\sfx_combo.wav");
+    }
+    if (g_game->Level() > prevLevel) g_engine->PlaySfx(L"assets\\src\\sfx_levelup.wav");
+
+    const bool over = g_game->IsOver();
+    if (over && !prevOver) g_engine->PlaySfx(L"assets\\src\\sfx_gameover.wav");
+    if (!over && prevOver) g_engine->PlaySfx(L"assets\\src\\sfx_start.wav");
+
+    prevLines = lines;
+    prevLevel = g_game->Level();
+    prevOver = over;
 }
 
 int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nShowCmd)
@@ -211,6 +255,7 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInstance, LPWSTR lpCmdLine
             if (dt > 0.25f) dt = 0.25f; // clamp on focus loss
 
             g_game->Tick(dt, g_keys);
+            PumpAudio();
 
             // ---- frame render ----
             g_engine->Clear(Math::Color(0.04f, 0.05f, 0.07f, 1.f)); // dark UI background
