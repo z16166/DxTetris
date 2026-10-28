@@ -1,0 +1,59 @@
+{
+  "sr": 44100,
+  "events": {
+    "clear1": {
+      "sha256": "1882ecd0c0a3c0dd1fc6864ba50afe04f88c7bcac488b96c16a839d0cca28a4c"
+    },
+    "clear2": {
+      "sha256": "d956ec18f67b7496ca1b2a5be471e15c2b0489e611f54ad780cb7f8602f44252"
+    },
+    "clear3": {
+      "sha256": "8c7fd6f8a7a1ac2ed683304b04ccec1f42095bbcf69e98dc56fe3cc0efc30f11"
+    },
+    "clear4": {
+      "sha256": "1dec5f5d84deadeb3fd86553faed3abac54828f478d9c8cc72da1e3365668413"
+    },
+    "combo": {
+      "sha256": "ca6204d9434c64a91c4218ccca7500eae5b49210900752c9d7890adb81bd0a79"
+    },
+    "gameover": {
+      "sha256": "8cadb0a21085eac8825ac7f0359be36cb74e3fbccf9f98687ddef6b6439541ac"
+    },
+    "harddrop": {
+      "sha256": "e40fde31d225d47e2aeb94dcadafd712ed6e81916904b30e51f795788f98805f"
+    },
+    "key_hold": {
+      "sha256": "73b42ab23be05ebeada04e01d7a8b903a1cdd1753a090c5032983da1066bacc2"
+    },
+    "key_holdfail": {
+      "sha256": "f971a9aaa8626894132d1d3d7139e0f06b01f3beb894f680f5033eccfbbcd969"
+    },
+    "key_move": {
+      "sha256": "6f11ed84d8914f169459172faf2651806a53d49d4626d4861572c7b8c0bedd13"
+    },
+    "key_rotate": {
+      "sha256": "bbd9da26d22d5dad1a44c3caf28128b1ff49707d5b274c1d7abfe9ab1de3f8be"
+    },
+    "levelup": {
+      "sha256": "c67e2209939f162d274161c7738d475b617d30498feb19f4d6f8e9f81a9f6995"
+    },
+    "lock": {
+      "sha256": "6db5ab3135db1744aa8c48c23dfba571630a95007fe406044cdd2007a5c4f1dc"
+    },
+    "pause": {
+      "sha256": "dd232d4de3be400d86035884191b70f2e4d1ad3c81bd032a0f63256d943eaee7"
+    },
+    "select": {
+      "sha256": "73b42ab23be05ebeada04e01d7a8b903a1cdd1753a090c5032983da1066bacc2"
+    },
+    "softstep": {
+      "sha256": "9337c3c28568fd7201713fecb84a26b18536355fd7c760f03f6035caed523adc"
+    },
+    "start": {
+      "sha256": "881c4facb42744aabf4ff7f37d71f296934aa2445473ed9e6336a80ae9852758"
+    },
+    "unpause": {
+      "sha256": "dd232d4de3be400d86035884191b70f2e4d1ad3c81bd032a0f63256d943eaee7"
+    }
+  }
+}

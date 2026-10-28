@@ -1,0 +1,137 @@
+{
+  "source": "gen_atlas.py",
+  "size": 512,
+  "supersample": 4,
+  "regions": [
+    {
+      "name": "white",
+      "rect": [
+        2,
+        2,
+        1,
+        1
+      ],
+      "id": "ffc7ca9f9afec780"
+    },
+    {
+      "name": "panel",
+      "rect": [
+        2,
+        16,
+        156,
+        80
+      ],
+      "id": "3ae6509fb22b219d"
+    },
+    {
+      "name": "frame",
+      "rect": [
+        2,
+        100,
+        224,
+        144
+      ],
+      "id": "f5791ad5c2a68c02"
+    },
+    {
+      "name": "circle",
+      "rect": [
+        170,
+        2,
+        32,
+        32
+      ],
+      "id": "6f93530c17c8dc3b"
+    },
+    {
+      "name": "vignette",
+      "rect": [
+        210,
+        2,
+        64,
+        64
+      ],
+      "id": "22358a25eb5ef341"
+    },
+    {
+      "name": "shadow",
+      "rect": [
+        280,
+        2,
+        64,
+        40
+      ],
+      "id": "435d06d3797c16f0"
+    },
+    {
+      "name": "glyph_I",
+      "rect": [
+        2,
+        250,
+        64,
+        32
+      ],
+      "id": "8c081f52a8852b2f"
+    },
+    {
+      "name": "glyph_O",
+      "rect": [
+        70,
+        250,
+        64,
+        32
+      ],
+      "id": "6162da2a6a11affb"
+    },
+    {
+      "name": "glyph_T",
+      "rect": [
+        138,
+        250,
+        64,
+        32
+      ],
+      "id": "8b0d2bf528d603f3"
+    },
+    {
+      "name": "glyph_S",
+      "rect": [
+        206,
+        250,
+        64,
+        32
+      ],
+      "id": "4a21679650bc9c7c"
+    },
+    {
+      "name": "glyph_Z",
+      "rect": [
+        274,
+        250,
+        64,
+        32
+      ],
+      "id": "8b45f738ff560305"
+    },
+    {
+      "name": "glyph_J",
+      "rect": [
+        342,
+        250,
+        64,
+        32
+      ],
+      "id": "6722cd46689c71b1"
+    },
+    {
+      "name": "glyph_L",
+      "rect": [
+        410,
+        250,
+        64,
+        32
+      ],
+      "id": "8490106f1613367c"
+    }
+  ]
+}

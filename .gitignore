@@ -1,0 +1,46 @@
+# build outputs
+/build/
+/build-dbg/
+/out/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+build.ninja
+.ninja_deps
+.ninja_log
+compile_commands.json
+
+# binaries / intermediates
+*.exe
+*.dll
+*.lib
+*.exp
+*.obj
+*.pdb
+*.ilk
+*.map
+*.cso
+
+# generated headers and asset packs (rebuilt by tools/)
+/assets/generated/
+
+# runtime artifacts
+/snapshot*.png
+/interactive*.png
+/step_*.txt
+/input_log.txt
+
+# vendored third-party library
+/third_party/
+
+# editor / OS
+.vs/
+.vscode/
+*.user
+*.suo
+Thumbs.db
+desktop.ini
+
+# python
+__pycache__/
+*.pyc

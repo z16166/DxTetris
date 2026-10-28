@@ -1,0 +1,27 @@
+# style follows the existing tree: 4-space indent, Allman braces, left-aligned pointers, 120 columns
+BasedOnStyle: LLVM
+Language: Cpp
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+AccessModifierOffset: -4
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Empty
+IndentCaseLabels: false
+PointerAlignment: Left
+ReferenceAlignment: Pointer
+SpaceBeforeParens: ControlStatements
+AlignTrailingComments: true
+SortIncludes: false
+ReflowComments: false
+FixNamespaceComments: true
+BreakBeforeBinaryOperators: None
+AllowAllArgumentsOnNextLine: true
+AllowAllParametersOfDeclarationOnNextLine: true
+BinPackArguments: true
+BinPackParameters: true
