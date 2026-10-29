@@ -28,13 +28,19 @@ A Tetris clone in C++20 / Direct3D 11, built with CMake + Ninja against [DirectX
 
 ## Build
 
-Requirements: Visual Studio 2022+ (MSVC x64), CMake 3.29+, Ninja, Python 3 with Pillow, and a DirectXTK source tree under `third_party/DirectXTK` (build its `x64-Release` configuration first).
+Requirements: Visual Studio 2022+ (MSVC x64), CMake 3.29+, Ninja, Python 3 with Pillow, and a DirectXTK source tree under `third_party/DirectXTK`. Build DirectXTK once with `tools\build_dxtk.bat`: it configures the static CRT (`/MT`) and XAudio 2.9, matching the game's runtime settings.
 
 ```bat
 call "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -arch=x64
+tools\build_dxtk.bat
+python tools\gen_assets.py
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
+
+`tools\gen_assets.py` rebuilds the generated asset sections from `assets/src` (run it once after cloning, and after changing any source asset).
+
+The game links the MSVC runtime statically (`/MT`), so no Visual C++ redistributable DLLs are required. Its remaining DLL imports (`d3d11`, `dxgi`, `ole32`, `user32`, `winmm`, `kernel32`, `imm32`, `XAudio2_9`) are all Windows system components; `XAudio2_9.dll` ships with Windows 10/11.
 
 The executable and its runtime assets land in `build/`; run `build\tetris.exe`.
 
