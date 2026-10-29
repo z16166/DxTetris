@@ -1,0 +1,112 @@
+name: Build Windows x64
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and package
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Checkout DirectXTK
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/DirectXTK
+          ref: 873aaf3d1e658235bf7e3c153a7361911136b650
+          path: third_party/DirectXTK
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python packages
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python -c "import PIL; print('Pillow', PIL.__version__)"
+
+      - name: Install Ninja (windows-latest no longer ships it)
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check ninja
+          $scripts = python -c "import sysconfig; print(sysconfig.get_path('scripts'))"
+          $scripts | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & (Join-Path $scripts "ninja.exe") --version
+
+      - name: Generate asset sections
+        shell: pwsh
+        run: python tools/gen_assets.py
+
+      - name: Set up MSVC x64
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build DirectXTK with the static CRT
+        shell: pwsh
+        run: |
+          cmake -S third_party/DirectXTK -B third_party/DirectXTK/out/build/x64-Release -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
+            -DDIRECTX_ARCH=x64 `
+            -DBUILD_SHARED_LIBS=OFF `
+            -DBUILD_TOOLS=OFF `
+            -DBUILD_XAUDIO_WIN10=ON `
+            -DBUILD_XAUDIO_WIN8=OFF `
+            -DBUILD_XAUDIO_REDIST=OFF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build third_party/DirectXTK/out/build/x64-Release --target DirectXTK
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build tetris.exe
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/tetris/assets/src | Out-Null
+          Copy-Item build/tetris.exe dist/tetris/tetris.exe
+          Copy-Item assets/src/*.png dist/tetris/assets/src/
+          Copy-Item assets/src/*.wav dist/tetris/assets/src/
+          Compress-Archive -Path dist/tetris -DestinationPath dist/DxTetris-windows-x64.zip -Force
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path dist/DxTetris-windows-x64.zip))
+          try {
+            $names = @($zip.Entries | ForEach-Object { $_.FullName })
+            if ($names -notcontains "tetris/tetris.exe") { throw "package is missing tetris/tetris.exe" }
+            if ($names -notcontains "tetris/assets/src/font_sheet.png") { throw "package is missing the font sheet" }
+            if ($names -notcontains "tetris/assets/src/atlas.png") { throw "package is missing the atlas" }
+            $wavs = @($names | Where-Object { $_ -like "tetris/assets/src/*.wav" })
+            if ($wavs.Count -lt 18) { throw "package contains only $($wavs.Count) wav files" }
+            $names | Sort-Object
+          }
+          finally {
+            $zip.Dispose()
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DxTetris-windows-x64
+          path: dist/DxTetris-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14

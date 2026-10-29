@@ -2,6 +2,7 @@
 /build/
 /build-dbg/
 /out/
+/dist/
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
