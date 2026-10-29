@@ -3,6 +3,10 @@
 // RAII contract: all D3D objects are COM (ComPtr, DirectXTK headers); UniqueHandle for non-CCOM handles.
 // No WRL::Range, no WRL event masks, no dynamic JSON — generated header data only.
 
+#ifndef NOMINMAX // windows.h's min/max macros would break std::min/std::max/std::clamp
+#define NOMINMAX
+#endif
+
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>

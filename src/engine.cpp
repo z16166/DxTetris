@@ -19,6 +19,8 @@
 #include "Audio.h"
 #include "PostProcess.h"
 #include <wincodec.h>
+#include <algorithm>
+#include <cmath>
 #include <vector>
 #include <map>
 #include <unordered_map>
@@ -104,12 +106,38 @@ HWND Engine::CreateWindowHandle(HINSTANCE hInst, int w, int h, WNDPROC wndProc)
     wc.style = CS_HREDRAW | CS_VREDRAW;
     if (!RegisterClassExW(&wc)) TETRIS_CHECK(HRESULT_FROM_WIN32(GetLastError()));
 
-    m_width = w;
-    m_height = h;
-    RECT rc{0, 0, w, h};
-    AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE); // client area = w×h (zero rect yields only frame size)
-    HWND hwnd = CreateWindowW(m_szClass, L"Tetris", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
-                              rc.right - rc.left, rc.bottom - rc.top, nullptr, nullptr, hInst, nullptr);
+    const DWORD style = WS_OVERLAPPEDWINDOW;
+
+    // Fit the default client size inside the desktop work area (screen minus taskbar/appbars) and
+    // centre it there: a window created at CW_USEDEFAULT can start partly underneath the taskbar.
+    RECT work{};
+    if (!SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0) || work.right <= work.left ||
+        work.bottom <= work.top)
+        work = {0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)};
+    const int workW = work.right - work.left;
+    const int workH = work.bottom - work.top;
+
+    RECT probe{0, 0, w, h};
+    AdjustWindowRectEx(&probe, style, FALSE, 0);
+    const int frameW = (probe.right - probe.left) - w;
+    const int frameH = (probe.bottom - probe.top) - h;
+    const double maxScaleW = (double)std::max(320, workW - frameW - 8) / (double)w;
+    const double maxScaleH = (double)std::max(240, workH - frameH - 8) / (double)h;
+    const double fit = std::min({1.0, maxScaleW, maxScaleH}); // keep the design aspect when shrinking
+    const int clientW = std::max(320, (int)std::lround(w * fit));
+    const int clientH = std::max(240, (int)std::lround(h * fit));
+
+    RECT rc{0, 0, clientW, clientH};
+    AdjustWindowRectEx(&rc, style, FALSE, 0);
+    const int outerW = rc.right - rc.left;
+    const int outerH = rc.bottom - rc.top;
+    const int posX = work.left + std::max(0, (workW - outerW) / 2);
+    const int posY = work.top + std::max(0, (workH - outerH) / 2);
+
+    m_width = clientW;
+    m_height = clientH;
+    HWND hwnd = CreateWindowW(m_szClass, L"Tetris", style, posX, posY, outerW, outerH, nullptr, nullptr, hInst,
+                              nullptr);
     if (!hwnd) TETRIS_CHECK(HRESULT_FROM_WIN32(GetLastError()));
     SetWindowTextW(hwnd, L"Tetris");    // title bar text
     ImmAssociateContext(hwnd, nullptr); // detach any IME context from the game window
@@ -161,35 +189,40 @@ HWND Engine::CreateWindowHandle(HINSTANCE hInst, int w, int h, WNDPROC wndProc)
 
 void Engine::Resize(int w, int h)
 {
+    if (w <= 0 || h <= 0) return;
     m_width = w;
     m_height = h;
-    if (m_swapchain && w > 0 && h > 0)
-    {
-        // recreate RTV/DSV after resize (release then recreate on next Present; simplified: recreate here)
-        m_rtv = nullptr;
-        m_dsv = nullptr;
-        ComPtr<ID3D11Texture2D> back;
-        TETRIS_CHECK(m_swapchain->ResizeBuffers(2, w, h, DXGI_FORMAT_B8G8R8A8_UNORM, 0));
-        TETRIS_CHECK(m_swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), &back));
-        TETRIS_CHECK(m_dev->CreateRenderTargetView(back.Get(), nullptr, m_rtv.GetAddressOf()));
-        // recreate depth tex + DSV:
-        D3D11_TEXTURE2D_DESC dsDesc{};
-        dsDesc.Width = w;
-        dsDesc.Height = h;
-        dsDesc.MipLevels = 1;
-        dsDesc.ArraySize = 1;
-        dsDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-        dsDesc.SampleDesc.Count = 1;
-        dsDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-        ComPtr<ID3D11Texture2D> depthTex;
-        TETRIS_CHECK(m_dev->CreateTexture2D(&dsDesc, nullptr, depthTex.GetAddressOf()));
-        TETRIS_CHECK(m_dev->CreateDepthStencilView(depthTex.Get(), nullptr, m_dsv.GetAddressOf()));
-        D3D11_VIEWPORT vp{0.f, 0.f, (float)w, (float)h, 0.f, 1.f};
-        m_ctx->RSSetViewports(1, &vp);
-        ID3D11RenderTargetView* rtvs[1] = {m_rtv.Get()};
-        m_ctx->OMSetRenderTargets(1, rtvs, m_dsv.Get());
-        m_backbuffer = back;
-    }
+    if (!m_swapchain || !m_dev) return;
+
+    // ResizeBuffers fails while any reference to a back buffer is alive, so drop all of them first.
+    // This runs inside WndProc: never throw from here, just leave the frame unbound (Present rebinds).
+    m_rtv.Reset();
+    m_dsv.Reset();
+    m_backbuffer.Reset();
+    if (FAILED(m_swapchain->ResizeBuffers(2, (UINT)w, (UINT)h, DXGI_FORMAT_B8G8R8A8_UNORM, 0))) return;
+
+    ComPtr<ID3D11Texture2D> back;
+    if (FAILED(m_swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)back.GetAddressOf()))) return;
+    if (FAILED(m_dev->CreateRenderTargetView(back.Get(), nullptr, m_rtv.GetAddressOf()))) return;
+
+    // recreate depth tex + DSV:
+    D3D11_TEXTURE2D_DESC dsDesc{};
+    dsDesc.Width = (UINT)w;
+    dsDesc.Height = (UINT)h;
+    dsDesc.MipLevels = 1;
+    dsDesc.ArraySize = 1;
+    dsDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    dsDesc.SampleDesc.Count = 1;
+    dsDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+    ComPtr<ID3D11Texture2D> depthTex;
+    if (FAILED(m_dev->CreateTexture2D(&dsDesc, nullptr, depthTex.GetAddressOf()))) return;
+    if (FAILED(m_dev->CreateDepthStencilView(depthTex.Get(), nullptr, m_dsv.GetAddressOf()))) return;
+
+    D3D11_VIEWPORT vp{0.f, 0.f, (float)w, (float)h, 0.f, 1.f};
+    m_ctx->RSSetViewports(1, &vp);
+    ID3D11RenderTargetView* rtvs[1] = {m_rtv.Get()};
+    m_ctx->OMSetRenderTargets(1, rtvs, m_dsv.Get());
+    m_backbuffer = back;
 }
 
 void Engine::Clear(const DirectX::SimpleMath::Color& c)

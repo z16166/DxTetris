@@ -6,6 +6,8 @@
 #include <windows.h>
 #include <imm.h>      // ImmDisableIME — keep the IME from eating game keys
 #include <mmsystem.h> // timeBeginPeriod
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <exception>
@@ -49,6 +51,20 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     {
     case WM_CLOSE: g_running = false; return 0;
     case WM_DESTROY: return 0;
+    case WM_ERASEBKGND: return 1; // we repaint every frame; skipping the erase avoids resize flicker
+    case WM_SIZE:
+        if (g_engine && wp != SIZE_MINIMIZED && LOWORD(lp) > 0 && HIWORD(lp) > 0)
+            g_engine->Resize(LOWORD(lp), HIWORD(lp));
+        return 0;
+    case WM_GETMINMAXINFO: // keep the UI readable at the smallest useful size
+    {
+        auto* mmi = reinterpret_cast<MINMAXINFO*>(lp);
+        RECT rc{0, 0, 720, 600};
+        AdjustWindowRectEx(&rc, WS_OVERLAPPEDWINDOW, FALSE, 0);
+        mmi->ptMinTrackSize.x = rc.right - rc.left;
+        mmi->ptMinTrackSize.y = rc.bottom - rc.top;
+        return 0;
+    }
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
         if (wp < 256) s_keyDown[wp] = true;
@@ -79,78 +95,226 @@ static Math::Color PieceColor(Piece p)
     }
 }
 
-// board + pieces + HUD (must be called between g_ui->Begin()/End())
-static void DrawPlayfield()
+// ---------------------------------------------------------------------------
+// Layout
+// The well is tall (10 x 22 cells), so the title and the HUD sit to its right.
+// A fixed design box is centred in the client area and scaled uniformly, which
+// keeps the composition balanced whatever the window size.
+// ---------------------------------------------------------------------------
+namespace layout
 {
-    const float CELL = 32.f;
-    const float BX = 60.f, BY = 100.f;
-    const float BW = CELL * 10.f, BH = CELL * 22.f; // rows 0..21: the 2 spawn-buffer rows stay visible
+constexpr float kCell = 36.f;
+constexpr float kCols = 10.f;
+constexpr float kRows = 22.f;
+constexpr float kBoardW = kCell * kCols; // 360 design px
+constexpr float kBoardH = kCell * kRows; // 792 design px
+constexpr float kFrame = 8.f;            // border around the well
+constexpr float kGap = 48.f;             // well border -> side panel
+constexpr float kPanelW = 440.f;         // side panel (title, HUD, controls)
+constexpr float kPad = 24.f;             // margin around the whole design box
+
+constexpr float kDesignW = kBoardW + kGap + kPanelW + 2.f * kFrame + 2.f * kPad; // 912
+constexpr float kDesignH = kBoardH + 2.f * kFrame + 2.f * kPad;                  // 856
+} // namespace layout
+
+struct Layout
+{
+    float s = 1.f;      // design px -> screen px
+    float x = 0.f;      // well top-left (screen px)
+    float y = 0.f;
+    float cell = 0.f;   // one board cell (screen px)
+    float panelX = 0.f; // side panel left edge (screen px)
+    float X(float v) const { return x + v * s; }
+    float Y(float v) const { return y + v * s; }
+};
+
+static float Snap(float v)
+{
+    return std::floor(v + 0.5f);
+}
+
+static Layout ComputeLayout()
+{
+    RECT rc{};
+    GetClientRect(g_hwnd, &rc);
+    const float w = (float)std::max<LONG>(1, rc.right - rc.left);
+    const float h = (float)std::max<LONG>(1, rc.bottom - rc.top);
+
+    // Whole-pixel cells keep the board grid crisp; everything else follows that scale.
+    float s = std::min(w / layout::kDesignW, h / layout::kDesignH);
+    float cell = std::floor(layout::kCell * s);
+    cell = std::max(cell, 12.f);
+    s = cell / layout::kCell;
+
+    Layout L;
+    L.s = s;
+    L.cell = cell;
+    L.x = Snap((w - layout::kDesignW * s) * 0.5f + (layout::kPad + layout::kFrame) * s);
+    L.y = Snap((h - layout::kDesignH * s) * 0.5f + (layout::kPad + layout::kFrame) * s);
+    L.panelX = Snap(L.X(layout::kBoardW + layout::kGap));
+    return L;
+}
+
+static const Math::Color kTitleColor(0.86f, 0.88f, 0.92f, 1.f);
+static const Math::Color kLabelColor(0.62f, 0.66f, 0.74f, 1.f);
+static const Math::Color kValueColor(0.90f, 0.92f, 0.96f, 1.f);
+static const Math::Color kKeyColor(0.98f, 0.78f, 0.32f, 1.f);
+static const Math::Color kHintColor(0.72f, 0.75f, 0.82f, 1.f);
+
+// text anchored to a design-space position measured from the well's top-left
+static void DrawLabel(const Layout& L, const char* s, float dx, float dy, float baseScale, Math::Color c)
+{
+    g_ui->DrawTextA(UiFont::kDefaultFont, s, Snap(L.X(dx)), Snap(L.Y(dy)), c, baseScale * L.s);
+}
+
+static void DrawCentered(const Layout& L, const char* s, float centerX, float dy, float baseScale, Math::Color c)
+{
+    const float ts = baseScale * L.s;
+    const float w = g_ui->TextWidthA(UiFont::kDefaultFont, s, ts).x;
+    g_ui->DrawTextA(UiFont::kDefaultFont, s, Snap(centerX - w * 0.5f), Snap(L.Y(dy)), c, ts);
+}
+
+static void DrawBoard(const Layout& L)
+{
+    const float bx = L.x, by = L.y;
+    const float bw = layout::kBoardW * L.s, bh = layout::kBoardH * L.s;
+    const float pad = layout::kFrame * L.s;
+    const float cell = L.cell;
     int cells[4][2];
 
-    g_ui->FillRect(BX - 8.f, BY - 8.f, BW + 16.f, BH + 16.f, Math::Color(0.11f, 0.12f, 0.16f, 1.f)); // frame
-    g_ui->FillRect(BX, BY, BW, BH, Math::Color(0.05f, 0.06f, 0.08f, 1.f));                           // well
+    g_ui->FillRect(bx - pad, by - pad, bw + 2.f * pad, bh + 2.f * pad, Math::Color(0.11f, 0.12f, 0.16f, 1.f)); // frame
+    g_ui->FillRect(bx, by, bw, bh, Math::Color(0.05f, 0.06f, 0.08f, 1.f)); // well
 
     for (int y = 0; y < 22; ++y)
         for (int x = 0; x < 10; ++x)
         {
             Piece p = g_game->At(x, y);
             if (p == Piece::NONE) continue;
-            g_ui->FillRect(BX + x * CELL + 1.f, BY + y * CELL + 1.f, CELL - 2.f, CELL - 2.f, PieceColor(p));
+            g_ui->FillRect(bx + x * cell + 1.f, by + y * cell + 1.f, cell - 2.f, cell - 2.f, PieceColor(p));
         }
 
     if (g_game->Current() != Piece::NONE)
     {
         Math::Color ghost = PieceColor(g_game->Current());
         ghost.w = 0.22f;
+        const float inset = std::max(2.f, cell * 0.16f);
+
         g_game->PieceCells(g_game->Current(), g_game->CurRot(), g_game->CurX(), g_game->LandingY(), cells);
         for (int i = 0; i < 4; ++i)
             if (cells[i][1] >= 0 && cells[i][1] < 22)
-                g_ui->FillRect(BX + cells[i][0] * CELL + 5.f, BY + cells[i][1] * CELL + 5.f, CELL - 10.f, CELL - 10.f,
-                               ghost);
+                g_ui->FillRect(bx + cells[i][0] * cell + inset, by + cells[i][1] * cell + inset, cell - 2.f * inset,
+                               cell - 2.f * inset, ghost);
 
         g_game->PieceCells(g_game->Current(), g_game->CurRot(), g_game->CurX(), g_game->CurY(), cells);
         for (int i = 0; i < 4; ++i)
             if (cells[i][1] >= 0 && cells[i][1] < 22)
-                g_ui->FillRect(BX + cells[i][0] * CELL + 1.f, BY + cells[i][1] * CELL + 1.f, CELL - 2.f, CELL - 2.f,
+                g_ui->FillRect(bx + cells[i][0] * cell + 1.f, by + cells[i][1] * cell + 1.f, cell - 2.f, cell - 2.f,
                                PieceColor(g_game->Current()));
     }
+}
 
-    // side panel
-    const float NX = BX + BW + 70.f;
+// Every key the game reacts to is listed on screen (main.cpp PumpInput key map).
+static const struct
+{
+    const char* key;
+    const char* action;
+} kHelpLines[] = {
+    {"Left/Right", "Move"},      {"Up", "Hard drop"}, {"Down", "Soft drop"},
+    {"X", "Rotate CW"},          {"Z", "Rotate CCW"}, {"Space", "Rotate 180"},
+    {"E", "Hold"},               {"Esc", "Pause"},    {"Y", "Restart"},
+};
+
+// A piece centred inside a 4x2-cell box (preview / hold slot).
+static void DrawPreviewPiece(const Game* game, Piece p, float boxX, float boxY, float cell, float gap)
+{
+    int cells[4][2];
+    game->PieceCells(p, 0, 0, 0, cells);
+    int minX = cells[0][0], maxX = minX, minY = cells[0][1], maxY = minY;
+    for (int i = 1; i < 4; ++i)
+    {
+        minX = std::min(minX, cells[i][0]);
+        maxX = std::max(maxX, cells[i][0]);
+        minY = std::min(minY, cells[i][1]);
+        maxY = std::max(maxY, cells[i][1]);
+    }
+    const float boxW = 4.f * cell, boxH = 2.f * cell;
+    const float ox = boxX + (boxW - (maxX - minX + 1) * cell) * 0.5f - minX * cell;
+    const float oy = boxY + (boxH - (maxY - minY + 1) * cell) * 0.5f - minY * cell;
+    for (int i = 0; i < 4; ++i)
+        g_ui->FillRect(ox + cells[i][0] * cell, oy + cells[i][1] * cell, cell - gap, cell - gap, PieceColor(p));
+}
+
+static void DrawSidePanel(const Layout& L)
+{
+    const float px = L.panelX;
+    const float unit = L.s;
     char buf[128];
-    g_ui->DrawTextA(UiFont::kDefaultFont, "NEXT", NX, 40.f, Math::Color(0.70f, 0.72f, 0.78f, 1.f));
+
+    // title: beside the well, not above it
+    DrawLabel(L, "Tetris", layout::kBoardW + layout::kGap, -8.f, 1.f, kTitleColor);
+
+    // Next: three previews in a row (4x2-cell boxes, piece centred inside), keeping the panel compact
+    DrawLabel(L, "Next", layout::kBoardW + layout::kGap, 76.f, 0.5f, kLabelColor);
     for (int n = 0; n < 3; ++n)
     {
         Piece p = g_game->NextAt(n);
         if (p == Piece::NONE) continue;
-        g_game->PieceCells(p, 0, 0, 0, cells);
-        const float ox = NX, oy = 118.f + n * 104.f;
-        for (int i = 0; i < 4; ++i)
-            g_ui->FillRect(ox + cells[i][0] * 24.f, oy + cells[i][1] * 24.f, 22.f, 22.f, PieceColor(p));
+        DrawPreviewPiece(g_game, p, px + (6.f + n * 120.f) * unit, L.Y(112.f), 28.f * unit, 2.f * unit);
     }
 
-    g_ui->DrawTextA(UiFont::kDefaultFont, "HOLD", NX, 420.f, Math::Color(0.70f, 0.72f, 0.78f, 1.f));
+    DrawLabel(L, "Hold", layout::kBoardW + layout::kGap, 190.f, 0.5f, kLabelColor);
     if (g_game->Held() != Piece::NONE)
-    {
-        g_game->PieceCells(g_game->Held(), 0, 0, 0, cells);
-        for (int i = 0; i < 4; ++i)
-            g_ui->FillRect(NX + cells[i][0] * 24.f, 480.f + cells[i][1] * 24.f, 22.f, 22.f, PieceColor(g_game->Held()));
-    }
+        DrawPreviewPiece(g_game, g_game->Held(), px + 6.f * unit, L.Y(216.f), 28.f * unit, 2.f * unit);
 
-    snprintf(buf, sizeof buf, "SCORE %d", g_game->Score());
-    g_ui->DrawTextA(UiFont::kDefaultFont, buf, NX, 660.f, Math::Color(0.86f, 0.88f, 0.92f, 1.f));
-    snprintf(buf, sizeof buf, "LINES %d", g_game->Lines());
-    g_ui->DrawTextA(UiFont::kDefaultFont, buf, NX, 730.f, Math::Color(0.80f, 0.82f, 0.86f, 1.f));
-    snprintf(buf, sizeof buf, "LEVEL %d", g_game->Level());
-    g_ui->DrawTextA(UiFont::kDefaultFont, buf, NX, 800.f, Math::Color(0.80f, 0.82f, 0.86f, 1.f));
-
-    if (g_game->IsOver())
-        g_ui->DrawTextA(UiFont::kDefaultFont, "GAME OVER - press Y", 640, 40.f, Math::Color(0.95f, 0.45f, 0.45f, 1.f));
-    else if (g_game->IsPaused())
-        g_ui->DrawTextA(UiFont::kDefaultFont, "PAUSED", 640, 40.f, Math::Color(0.95f, 0.85f, 0.40f, 1.f));
+    snprintf(buf, sizeof buf, "Score %d", g_game->Score());
+    DrawLabel(L, buf, layout::kBoardW + layout::kGap, 296.f, 0.5f, kValueColor);
+    snprintf(buf, sizeof buf, "Lines %d", g_game->Lines());
+    DrawLabel(L, buf, layout::kBoardW + layout::kGap, 336.f, 0.5f, kValueColor);
+    snprintf(buf, sizeof buf, "Level %d", g_game->Level());
+    DrawLabel(L, buf, layout::kBoardW + layout::kGap, 376.f, 0.5f, kValueColor);
 
     if (!g_engine->AudioReady()) // no playback device: say so instead of looking broken
-        g_ui->DrawTextA(UiFont::kDefaultFont, "AUDIO OFF", 640, 150.f, Math::Color(0.70f, 0.50f, 0.50f, 1.f));
+        DrawLabel(L, "Audio off", layout::kBoardW + layout::kGap, 412.f, 0.4f, Math::Color(0.72f, 0.46f, 0.46f, 1.f));
+
+    // controls: key column + action column (monospace, so the columns line up)
+    DrawLabel(L, "Controls", layout::kBoardW + layout::kGap, 448.f, 0.5f, kLabelColor);
+    const float help = 0.45f * unit;
+    const float advance = g_ui->TextWidthA(UiFont::kDefaultFont, "M", 1.f).x; // one monospace cell at scale 1
+    const int nHelp = (int)(sizeof(kHelpLines) / sizeof(kHelpLines[0]));
+    for (int i = 0; i < nHelp; ++i)
+    {
+        const float y = Snap(L.Y(488.f + (float)i * 33.f));
+        g_ui->DrawTextA(UiFont::kDefaultFont, kHelpLines[i].key, px, y, kKeyColor, help);
+        g_ui->DrawTextA(UiFont::kDefaultFont, kHelpLines[i].action, px + 12.f * advance * help, y, kHintColor, help);
+    }
+}
+
+static void DrawStatusOverlay(const Layout& L)
+{
+    if (!g_game->IsOver() && !g_game->IsPaused()) return;
+
+    const float w = layout::kBoardW * L.s, h = layout::kBoardH * L.s;
+    g_ui->FillRect(L.x, L.y, w, h, Math::Color(0.02f, 0.02f, 0.03f, 0.74f)); // dim the well
+    const float cx = L.x + w * 0.5f;
+    if (g_game->IsOver())
+    {
+        DrawCentered(L, "Game Over", cx, 330.f, 0.6f, Math::Color(0.95f, 0.45f, 0.45f, 1.f));
+        DrawCentered(L, "Press Y to restart", cx, 400.f, 0.36f, kHintColor);
+    }
+    else
+    {
+        DrawCentered(L, "Paused", cx, 330.f, 0.66f, Math::Color(0.95f, 0.85f, 0.40f, 1.f));
+        DrawCentered(L, "Esc to resume", cx, 400.f, 0.36f, kHintColor);
+    }
+}
+
+// board + pieces + HUD (must be called between g_ui->Begin()/End())
+static void DrawPlayfield()
+{
+    const Layout L = ComputeLayout();
+    DrawBoard(L);
+    DrawSidePanel(L);
+    DrawStatusOverlay(L);
 }
 
 // sound effects: input edges plus game-state deltas. Audio is optional: PlaySfx no-ops without a device.
@@ -219,7 +383,7 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInstance, LPWSTR lpCmdLine
         for (int i = 1; i < __argc; ++i)
             if (_wcsnicmp(__wargv[i], L"--delay=", 8) == 0) snapDelayMs = _wtoi(__wargv[i] + 8);
 
-        HWND hwnd = g_engine->CreateWindowHandle(hInst, 1600, 900,
+        HWND hwnd = g_engine->CreateWindowHandle(hInst, 1120, 860,
                                                  WndProc); // engine registers class; main owns WNDPROC via callback
         g_hwnd = hwnd;
         ShowWindow(hwnd, SW_SHOW);
@@ -260,7 +424,6 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInstance, LPWSTR lpCmdLine
             // ---- frame render ----
             g_engine->Clear(Math::Color(0.04f, 0.05f, 0.07f, 1.f)); // dark UI background
             g_ui->Begin();
-            g_ui->DrawText(UiFont::kDefaultFont, L"TETRIS", 60, 18, Math::Color(0.86f, 0.88f, 0.92f, 1.f), 0.f);
             DrawPlayfield();
             g_ui->End();
 
