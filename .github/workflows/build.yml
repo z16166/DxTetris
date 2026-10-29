@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -110,3 +110,20 @@ jobs:
           path: dist/DxTetris-windows-x64.zip
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish GitHub Release
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: DxTetris Windows x64 build ${{ github.run_number }}
+          body: |
+            Automated **Windows x64** build from commit `${{ github.sha }}`.
+
+            Download `DxTetris-windows-x64.zip`, extract it, then run `tetris\tetris.exe`.
+            The zip contains the exe plus `assets/src` (font sheet, atlas and all sound effects).
+            The MSVC runtime is linked statically; no Visual C++ redistributable is required.
+          files: dist/DxTetris-windows-x64.zip
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          make_latest: true
