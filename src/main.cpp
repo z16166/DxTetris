@@ -35,6 +35,7 @@ static void PumpInput()
     const int MAP[11] = {
         VK_LEFT, VK_RIGHT, 'X', 'Z',       VK_SPACE, VK_DOWN,
         'E',     VK_UP,    'Y', VK_ESCAPE, 'P'}; // CW='X' CCW='Z' R180=SPACE SOFT=DOWN HOLD='E' HARD=UP START='Y' PAUSE=ESC SS='P'
+
     for (int i = 0; i < 11; ++i)
     {
         bool was = prev[i];
@@ -51,6 +52,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
     {
     case WM_CLOSE: g_running = false; return 0;
     case WM_DESTROY: return 0;
+
     case WM_ERASEBKGND: return 1; // we repaint every frame; skipping the erase avoids resize flicker
     case WM_SIZE:
         if (g_engine && wp != SIZE_MINIMIZED && LOWORD(lp) > 0 && HIWORD(lp) > 0)
@@ -65,6 +67,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
         mmi->ptMinTrackSize.y = rc.bottom - rc.top;
         return 0;
     }
+
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN:
         if (wp < 256) s_keyDown[wp] = true;
@@ -229,6 +232,7 @@ static void DrawPreviewPiece(const Game* game, Piece p, float boxX, float boxY, 
 {
     int cells[4][2];
     game->PieceCells(p, 0, 0, 0, cells);
+
     int minX = cells[0][0], maxX = minX, minY = cells[0][1], maxY = minY;
     for (int i = 1; i < 4; ++i)
     {
@@ -237,9 +241,11 @@ static void DrawPreviewPiece(const Game* game, Piece p, float boxX, float boxY, 
         minY = std::min(minY, cells[i][1]);
         maxY = std::max(maxY, cells[i][1]);
     }
+
     const float boxW = 4.f * cell, boxH = 2.f * cell;
     const float ox = boxX + (boxW - (maxX - minX + 1) * cell) * 0.5f - minX * cell;
     const float oy = boxY + (boxH - (maxY - minY + 1) * cell) * 0.5f - minY * cell;
+
     for (int i = 0; i < 4; ++i)
         g_ui->FillRect(ox + cells[i][0] * cell, oy + cells[i][1] * cell, cell - gap, cell - gap, PieceColor(p));
 }
@@ -295,6 +301,7 @@ static void DrawStatusOverlay(const Layout& L)
 
     const float w = layout::kBoardW * L.s, h = layout::kBoardH * L.s;
     g_ui->FillRect(L.x, L.y, w, h, Math::Color(0.02f, 0.02f, 0.03f, 0.74f)); // dim the well
+
     const float cx = L.x + w * 0.5f;
     if (g_game->IsOver())
     {
@@ -312,6 +319,7 @@ static void DrawStatusOverlay(const Layout& L)
 static void DrawPlayfield()
 {
     const Layout L = ComputeLayout();
+
     DrawBoard(L);
     DrawSidePanel(L);
     DrawStatusOverlay(L);
@@ -345,6 +353,7 @@ static void PumpAudio()
         g_engine->PlaySfx(clear);
         if (g_game->Combo() >= 1) g_engine->PlaySfx(L"assets\\src\\sfx_combo.wav");
     }
+
     if (g_game->Level() > prevLevel) g_engine->PlaySfx(L"assets\\src\\sfx_levelup.wav");
 
     const bool over = g_game->IsOver();
@@ -361,15 +370,18 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInstance, LPWSTR lpCmdLine
     (void)hPrevInstance;
     (void)lpCmdLine;
     (void)nShowCmd;
+
     ImmDisableIME(-1); // no IME: otherwise the composition window grabs X/Z/arrows and swallows game input
     const bool snapshotMode = (__argc > 1 && _wcsicmp(__wargv[1], L"--snapshot") == 0);
     const HRESULT hrCo = CoInitializeEx(nullptr, COINIT_MULTITHREADED); // WIC/XAudio2 need COM initialized (MTA)
+
     try
     {
         g_engine = new Engine();
         g_game = new Game();
         g_ui = new UiFont(*g_engine);
         g_engine->CreateDevice(false); // hardware; engine falls back to WARP (--snapshot runs this mode)
+
         {
             FILE* f = fopen("step_start.txt", "w");
             if (f)
@@ -378,6 +390,7 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInstance, LPWSTR lpCmdLine
                 fclose(f);
             }
         }
+
         if (snapshotMode) g_engine->EnableSnapshotMode(); // dump a presented frame to PNG, then exit
         int snapDelayMs = 0;                              // --delay=<ms>: capture after a warm-up (default: frame 1)
         for (int i = 1; i < __argc; ++i)
@@ -442,10 +455,12 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInstance, LPWSTR lpCmdLine
                 printf("STEP: snapshot done\n");
                 g_running = false;
             }
+
             g_engine->Present(showCursor);
             showCursor = false;
             firstFrame = false;
         }
+
         timeEndPeriod(1);
     }
     catch (const std::exception& e)
@@ -458,6 +473,7 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInstance, LPWSTR lpCmdLine
                 fclose(f);
             }
         }
+
         printf("EXCEPTION: %s\n", e.what());
         if (!snapshotMode) MessageBoxA(nullptr, e.what(), "Tetris - startup error", MB_ICONERROR | MB_OK);
     }
@@ -471,10 +487,12 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInstance, LPWSTR lpCmdLine
                 fclose(f);
             }
         }
+
         printf("EXCEPTION: unknown\n");
         if (!snapshotMode)
             MessageBoxA(nullptr, "Unknown startup failure.", "Tetris - startup error", MB_ICONERROR | MB_OK);
     }
+
     if (SUCCEEDED(hrCo)) CoUninitialize();
     return 0;
 }

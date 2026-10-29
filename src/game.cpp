@@ -210,11 +210,13 @@ void Game::ClearFullRows()
             }
         if (full) rows[cnt++] = y;
     }
+
     if (!cnt)
     {
         m_combo = -1;
         return;
     }
+
     for (int i = 0; i < cnt; ++i)
     {
         int y = rows[i];
@@ -224,6 +226,7 @@ void Game::ClearFullRows()
         for (int x = 0; x < 10; ++x)
             m_grid[0][x] = 0;
     }
+
     // guideline scoring (approx): singles100 double300 triple500 quad800 * level; B2B x2; combo chain 50*combo*level
     static const int baseTbl[5] = {0, 100, 300, 500, 800};
     bool prevB2B = m_b2b;
@@ -234,10 +237,12 @@ void Game::ClearFullRows()
         ++m_combo;
     else
         m_combo = 0;
+
     if (m_combo > 0) m_score += 50 * m_combo * m_level;
     m_level = std::max(m_level, 1 + m_lines / 10);
     m_fxLineFlash = 1.f;
     if (m_combo >= 2) m_fxComboFlash = 1.f;
+
     NotifyActionVisual(Action::LOCK); // fx/sound tap
 }
 
@@ -249,8 +254,10 @@ void Game::LockPiece(bool hardDrop)
         int ly = kSrs[(int)m_cur][m_curRot][c][1] + m_curY;
         if (ly >= 0 && ly < BoardHeight() && lx >= 0 && lx < 10) m_grid[ly][lx] = (int)m_cur + 1;
     }
+
     NotifyActionVisual(Action::LOCK); // land sfx (hard-drop handled by caller tap)
     ClearFullRows();
+
     if (hardDrop) m_fxLandShake = 1.f;
 }
 
@@ -295,6 +302,7 @@ void Game::HoldSwap()
         m_over = true;
         return;
     }
+
     m_curRot = 0;
     m_curX = 3;
     m_curY = 0;
@@ -302,6 +310,7 @@ void Game::HoldSwap()
     m_lockResets = 0;
     m_gratTimer = 0;
     m_holdUsed = true;
+
     RefillPeek();
     if (!Fits(m_cur, 0, m_curX, m_curY)) m_over = true; // TOCT on swap
 }
@@ -314,6 +323,7 @@ void Game::Tick(float dt, const InputSnapshot& keys)
         m_heldActive[idx] = n;
         return n && !w;
     };
+
     auto heldRepeat = [&](int idx, float threshold)
     {
         if (!keys.p[idx])
@@ -325,6 +335,7 @@ void Game::Tick(float dt, const InputSnapshot& keys)
         m_heldT[idx] += dt;
         return m_heldT[idx] >= threshold;
     };
+
     struct Idx
     {
         enum : int
@@ -342,12 +353,14 @@ void Game::Tick(float dt, const InputSnapshot& keys)
             COUNT = 11
         };
     };
+
     // single consumed snapshot per frame:
     bool eL = edge(Idx::L), eR = edge(Idx::R), eCW = edge(Idx::CW), eCCW = edge(Idx::CCW), e180 = edge(Idx::R180);
     bool eSoft = edge(Idx::SOFT), eHold = edge(Idx::HOLD), eHard = edge(Idx::HARD);
     bool eStart = edge(Idx::START), ePause = edge(Idx::PAUSE);
     bool hL = keys.p[Idx::L], hR = keys.p[Idx::R], hS = keys.p[Idx::SOFT];
     float &tL = m_heldT[Idx::L], &tR = m_heldT[Idx::R], &tS = m_heldT[Idx::SOFT];
+
     auto repeatL = [&]
     {
         if (eL) return false;
@@ -359,6 +372,7 @@ void Game::Tick(float dt, const InputSnapshot& keys)
         tL += dt;
         return tL >= 0.133f;
     };
+
     auto repeatR = [&]
     {
         if (eR) return false;
@@ -370,6 +384,7 @@ void Game::Tick(float dt, const InputSnapshot& keys)
         tR += dt;
         return tR >= 0.133f;
     };
+
     auto repeatS = [&]
     {
         if (eSoft) return false;
@@ -381,6 +396,7 @@ void Game::Tick(float dt, const InputSnapshot& keys)
         tS += dt;
         return tS >= 0.016f;
     };
+
     bool rL = repeatL(), rR = repeatR(), rS = repeatS();
 
     if (eStart && m_over) NewGame();
@@ -454,6 +470,7 @@ void Game::Tick(float dt, const InputSnapshot& keys)
             }
         }
     };
+
     auto applyMove = [&](int dx)
     {
         if (Fits(m_cur, m_curRot, m_curX + dx, m_curY))
@@ -506,6 +523,7 @@ void Game::Tick(float dt, const InputSnapshot& keys)
             m_gratTimer = 0;
             if (!onGround) m_curY++;
         }
+
         onGround = !Fits(m_cur, m_curRot, m_curX, m_curY + 1);
         if (onGround)
         {

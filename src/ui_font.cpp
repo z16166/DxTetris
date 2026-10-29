@@ -16,6 +16,7 @@ void UiFont::Begin()
     // state and would leave translucent fills (ghost piece, pause dimmer) far too bright.
     m_engine->GetSpriteBatch()->Begin(SpriteSortMode_Deferred, m_engine->GetCommonStates()->NonPremultiplied());
 }
+
 void UiFont::End()
 {
     m_engine->GetSpriteBatch()->End();
@@ -33,6 +34,7 @@ void UiFont::DrawText(int fontId, const wchar_t* s, float x, float y, Math::Colo
     const auto* font = m_engine->GetFont(fontId); // DirectXTK SpriteFont from generated kFontGlyphs
     float cx = x;
     if (centerW > 0.f) cx = x + (centerW - TextWidth(fontId, s, scale).x) * 0.5f;
+
     // DirectXTK SpriteFont::DrawString — layout via generated metrics (px-accurate)
     font->DrawString(batch, s, Math::Vector2(cx, y), c, 0.f, Math::Vector2::Zero, scale);
 }
@@ -44,6 +46,7 @@ void UiFont::DrawTextA(int fontId, const char* s, float x, float y, Math::Color 
     for (; *s && i < 511; ++s)
         buf[i++] = (wchar_t)(unsigned char)*s;
     buf[i] = 0;
+
     DrawText(fontId, buf, x, y, c, scale, centerW);
 }
 
@@ -52,6 +55,7 @@ Math::Vector2 UiFont::TextWidth(int fontId, const wchar_t* s, float scale) const
     const auto* font = m_engine->GetFont(fontId);
     float w = 0.f;
     const wchar_t* p = s;
+
     while (*p)
     {
         const auto* g = font->FindGlyph(*p);
@@ -59,6 +63,7 @@ Math::Vector2 UiFont::TextWidth(int fontId, const wchar_t* s, float scale) const
         if (g) w += float(g->Subrect.right - g->Subrect.left) + g->XAdvance;
         ++p;
     }
+
     return Math::Vector2(w * scale, 0.f);
 }
 
@@ -69,6 +74,7 @@ Math::Vector2 UiFont::TextWidthA(int fontId, const char* s, float scale) const
     for (; *s && i < 511; ++s)
         buf[i++] = (wchar_t)(unsigned char)*s;
     buf[i] = 0;
+
     return TextWidth(fontId, buf, scale);
 }
 

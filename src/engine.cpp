@@ -59,8 +59,10 @@ void Engine::CreateDevice(bool useWarp)
 
     ComPtr<IDXGIFactory2> factory;
     TETRIS_CHECK(CreateDXGIFactory2(0, __uuidof(IDXGIFactory2), &factory));
+
     TETRIS_CHECK(m_dev->CreateVertexShader(game_vs_cso, game_vs_cso_len, nullptr, m_vs.GetAddressOf()));
     TETRIS_CHECK(m_dev->CreatePixelShader(game_ps_cso, game_ps_cso_len, nullptr, m_ps.GetAddressOf()));
+
     // input layout: POSITION/NORMAL/TEXCOORD0/COLOR (stride 44 — VertexPositionNormalColorTexture)
     D3D11_INPUT_ELEMENT_DESC il[] = {
         {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
@@ -69,6 +71,7 @@ void Engine::CreateDevice(bool useWarp)
         {"COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0},
     };
     TETRIS_CHECK(m_dev->CreateInputLayout(il, 4, game_vs_cso, game_vs_cso_len, m_layout.GetAddressOf()));
+
     // DGSL effect (b0 matrices b1 lit params — our shader; DGSL layout compatible ✓ stride 44)
     m_effect = std::make_unique<DGSLEffect>(m_dev.Get(), nullptr); // public 2-arg ctor ✓
     m_postProc = nullptr; // (optional HDR/glow chain — set at init if enabled; see README design notes)
@@ -88,6 +91,7 @@ void Engine::CreateDevice(bool useWarp)
     {
         m_audio = nullptr;
     }
+
     // fonts: generated header data → runtime SpriteFont in-memory ctor (DirectXTK standard memory ctor ✓)
 }
 
@@ -228,9 +232,11 @@ void Engine::Resize(int w, int h)
 void Engine::Clear(const DirectX::SimpleMath::Color& c)
 {
     if (!m_rtv) return;
+
     float f[4] = {
         c.x, c.y, c.z,
         c.w}; // (SimpleMath::Color = XMFLOAT4 xyzw; linear via clear color raw values; sRGB textures sampled raw in shader)
+
     m_ctx->ClearRenderTargetView(m_rtv.Get(), f);
     if (m_dsv) m_ctx->ClearDepthStencilView(m_dsv.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.f, 0);
 }
@@ -238,13 +244,17 @@ void Engine::Clear(const DirectX::SimpleMath::Color& c)
 void Engine::BindBackBuffer()
 {
     if (!m_swapchain || !m_dev) return;
+
     ComPtr<ID3D11Texture2D> back;
     if (FAILED(m_swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), &back))) return;
+
     m_backbuffer = back;
     m_rtv.Reset();
     if (FAILED(m_dev->CreateRenderTargetView(back.Get(), nullptr, m_rtv.GetAddressOf()))) return;
+
     ID3D11RenderTargetView* rtvs[1] = {m_rtv.Get()};
     m_ctx->OMSetRenderTargets(1, rtvs, m_dsv.Get());
+
     D3D11_TEXTURE2D_DESC d{};
     back->GetDesc(&d);
     D3D11_VIEWPORT vp{0.f, 0.f, (float)d.Width, (float)d.Height, 0.f, 1.f};
@@ -261,9 +271,11 @@ void Engine::Present(bool showCursor)
 void Engine::SaveSnapshotPng(const char* path)
 {
     if (!m_backbuffer || !m_dev) return;
+
     // DirectXTK ScreenGrab: staging readback + WIC PNG encode (handles WIC/COM details)
     wchar_t wpath[MAX_PATH]{};
     MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, MAX_PATH);
+
     TETRIS_CHECK(SaveWICTextureToFile(m_ctx.Get(), m_backbuffer.Get(), GUID_ContainerFormatPng, wpath));
     OutputDebugStringA("snapshot saved (WIC)\n");
 }
@@ -273,14 +285,17 @@ DirectX::SpriteBatch* Engine::GetSpriteBatch()
 {
     return m_batch.get();
 }
+
 DirectX::CommonStates* Engine::GetCommonStates()
 {
     return m_states.get();
 }
+
 DirectX::GraphicsMemory* Engine::GetGraphicsMemory()
 {
     return m_gfxMem.get();
 }
+
 DirectX::Keyboard* Engine::GetKeyboard()
 {
     return m_keyboard.get();
@@ -297,6 +312,7 @@ Engine::GetPrimBatch() // lazy: constructed once; Begin() called by renderer eac
 ID3D11ShaderResourceView* Engine::GetWhiteTexture()
 {
     if (m_white) return m_white.Get();
+
     const uint32_t px = 0xFFFFFFFFu;
     D3D11_SUBRESOURCE_DATA init{&px, sizeof(px), sizeof(px)};
     D3D11_TEXTURE2D_DESC d{};
@@ -308,6 +324,7 @@ ID3D11ShaderResourceView* Engine::GetWhiteTexture()
     d.SampleDesc.Count = 1;
     d.Usage = D3D11_USAGE_IMMUTABLE;
     d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
     ComPtr<ID3D11Texture2D> tex;
     TETRIS_CHECK(m_dev->CreateTexture2D(&d, &init, tex.GetAddressOf()));
     TETRIS_CHECK(m_dev->CreateShaderResourceView(tex.Get(), nullptr, m_white.GetAddressOf()));
@@ -330,14 +347,17 @@ static std::wstring AssetPath(const wchar_t* rel)
         dir + L"\\..\\" + rel,
         dir + L"\\..\\..\\" + rel,
     };
+
     for (const auto& c : candidates)
         if (GetFileAttributesW(c.c_str()) != INVALID_FILE_ATTRIBUTES) return c;
+
     return candidates[0];
 }
 
 void Engine::PlaySfx(const wchar_t* fileName)
 {
     if (!m_audio) return;
+
     auto it = m_sfx.find(fileName);
     if (it == m_sfx.end())
     {
@@ -350,8 +370,10 @@ void Engine::PlaySfx(const wchar_t* fileName)
         {
             fx = nullptr; // a missing or broken wav must not take the game down
         }
+
         it = m_sfx.emplace(std::wstring(fileName), std::move(fx)).first;
     }
+
     if (it->second) it->second->Play();
 }
 
@@ -359,8 +381,10 @@ ID3D11ShaderResourceView* Engine::GetTexture(int id)
 {
     auto it = m_texes.find(id);
     if (it != m_texes.end()) return it->second.Get();
+
     // load once via WIC loader (PNG) — font sheet + atlas (stable id contract: HashFnv32("font")/("atlas")):
     ComPtr<ID3D11ShaderResourceView> srv;
+
     if (id == (int)HashFnv32("font"))
     { // font sheet PNG asset (generated): load via WIC loader (standard API ✓)
         TETRIS_CHECK(CreateWICTextureFromFile(m_dev.Get(), AssetPath(L"assets\\src\\font_sheet.png").c_str(), nullptr,
@@ -369,6 +393,7 @@ ID3D11ShaderResourceView* Engine::GetTexture(int id)
     else
         TETRIS_CHECK(CreateWICTextureFromFile(m_dev.Get(), AssetPath(L"assets\\src\\atlas.png").c_str(), nullptr,
                                               srv.GetAddressOf()));
+
     m_texes[id] = srv;
     return srv.Get();
 }
@@ -377,11 +402,13 @@ const DirectX::SpriteFont* Engine::GetFont(int fontId)
 {
     auto it = m_fonts.find(fontId);
     if (it != m_fonts.end()) return it->second.get();
+
     // runtime ctor from generated header static arrays (DirectXTK memory ctor ✓ standard):
     auto srv = GetTexture((int)HashFnv32("font")); // font sheet generated PNG (loaded once)
     auto font = std::make_unique<DirectX::SpriteFont>(
         srv, reinterpret_cast<const DirectX::SpriteFont::Glyph*>(kFontGlyphs), kFontCount,
         kFontLineSpacing); // layout match verified (Character/RECT/3 floats) ✓
+
     m_fonts[fontId] = std::move(font);
     return m_fonts[fontId].get();
 }
