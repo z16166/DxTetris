@@ -90,7 +90,6 @@ def gen():
     return verts
 
 def main():
-    import numpy as np_  # noqa
     v = gen()
     # simple AO: darken the 8 rounded corners slightly (vertex color)
     # build vertex list + index list (ordered for draw)
